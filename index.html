@@ -1,0 +1,1037 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Billiard Physics Simulation</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.js"></script>
+    <style>
+        /* CSS Styles */
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 10px;
+            background-color: #e0f0e0;
+        }
+
+        .container {
+            display: flex;
+            justify-content: center;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+
+        #canvasContainer {
+            position: relative;
+            display: inline-block;
+        }
+
+        #resetVelocityBtn {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 10;
+            padding: 8px 12px;
+            background-color: #ff4d4d;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            opacity: 0.8;
+            transition: opacity 0.3s;
+        }
+
+        #controls {
+            margin-bottom: 10px;
+            width: 100%;
+            text-align: center;
+        }
+
+        #dashboard {
+            display: flex;
+            flex-direction: row;
+            gap: 20px;
+            width: 1200px;
+            padding: 10px;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        #info-section {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+        }
+
+        #collision-data {
+            flex: 1;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .ball-info,
+        .momentum-info {
+            border: 1px solid #ccc;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th,
+        td {
+            border: 1px solid #ddd;
+            padding: 6px;
+            text-align: left;
+            font-size: 11px;
+        }
+
+        th {
+            background-color: #f2f2f2;
+        }
+
+        #setupPopup {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            justify-content: center;
+            align-items: center;
+        }
+
+        #setupContent {
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .setupInput {
+            margin: 5px 0;
+            padding: 5px;
+        }
+
+        .slider-container {
+            margin-bottom: 5px;
+        }
+
+        .slider-label {
+            margin-right: 10px;
+        }
+
+        .slider-value {
+            display: inline-block;
+            width: 50px;
+        }
+
+        #checkboxContainer {
+            margin-bottom: 10px;
+        }
+
+        /* Styles for the formula dashboard */
+        .formula-dashboard {
+            width: 100%;
+            padding: 5px;
+            background-color: #fff;
+            margin-top: 10px;
+            border-top: 1px solid #ccc;
+            font-size: 14px;
+        }
+
+        .formula-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+        }
+
+        .formula {
+            width: 45%;
+            font-size: 14px;
+        }
+
+        .values {
+            width: 53%;
+            text-align: right;
+            font-size: 14px;
+        }
+
+        @media (max-width: 700px) {
+            #dashboard {
+                flex-direction: column;
+                width: 100%;
+            }
+
+            #collision-data {
+                max-height: 200px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>Billiard Physics Simulation</h1>
+    <div id="controls">
+        <button onclick="resetSimulation()">Reset Simulation</button>
+        <button onclick="toggleFriction()">Toggle Friction: <span id="friction-status">Off</span></button>
+        <button onclick="showSetupPopup()">Set Initial Conditions</button>
+        <p>Click and drag the red ball to change its direction and speed</p>
+        <div class="slider-container">
+            <label class="slider-label">Collision Elasticity (e):</label>
+            <input type="range" id="elasticitySlider" min="0" max="1" step="0.01" value="1" oninput="updateElasticity()">
+            <span id="elasticityValue">1.00</span>
+        </div>
+        <div class="slider-container">
+            <label class="slider-label">Friction Coefficient (μ):</label>
+            <input type="range" id="frictionSlider" min="0" max="0.1" step="0.001" value="0.02" oninput="updateFrictionCoefficient()" disabled>
+            <span id="frictionValue">0.020</span>
+        </div>
+        <div id="checkboxContainer">
+            <label><input type="checkbox" id="elasticCollisionCheckbox" onclick="toggleElasticCollision()"> Perfectly Elastic Collision</label>
+        </div>
+        <div class="slider-container">
+            <label class="slider-label">Ball Size:</label>
+            <input type="range" id="ballSizeSlider" min="0.1" max="5" step="0.01" value="1" oninput="updateBallSize()">
+            <span id="ballSizeValue">1.00×</span>
+        </div>
+        <div class="slider-container">
+            <label class="slider-label">Red Ball Velocity:</label>
+            <input type="range" id="redBallVelocitySlider" min="0" max="10" step="0.1" value="5" oninput="updateRedBallVelocity()">
+            <span id="redBallVelocityValue">5.0 m/s</span>
+        </div>
+        <button onclick="toggleInertia()">Toggle Inertia: <span id="inertia-status">On</span></button>
+    </div>
+
+    <div class="container">
+        <div id="canvasContainer">
+            <button id="resetVelocityBtn" onclick="resetVelocities()">Reset Ball Velocities</button>
+        </div>
+        <div class="simulation-area">
+            <div class="info-panel">
+                <div id="dashboard">
+                    <!-- 왼쪽 섹션: Ball Info 및 Momentum -->
+                    <div id="info-section">
+                        <div id="ball1-info" class="ball-info"></div>
+                        <div id="ball2-info" class="ball-info"></div>
+                        <div id="momentum-info" class="momentum-info"></div>
+                    </div>
+
+                    <!-- 오른쪽 섹션: Recent Collisions -->
+                    <div id="collision-data">
+                        <h3>Recent Collisions</h3>
+                        <table id="collision-table">
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Type</th>
+                                    <th>Ball</th>
+                                    <th>Details</th>
+                                    <th>Change in Momentum</th>
+                                    <th>System Momentum Change</th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="formulaDashboard">
+                    <h2>Physics Formulas</h2>
+                    <div class="formula-row">
+                        <div class="formula"><strong>p = m × v</strong></div>
+                        <div class="values" id="formula-p"></div>
+                    </div>
+                    <div class="formula-row">
+                        <div class="formula"><strong>I = m × v - m × u</strong></div>
+                        <div class="values" id="formula-I-mvmu"></div>
+                    </div>
+                    <div class="formula-row">
+                        <div class="formula"><strong>Conservation of Momentum</strong></div>
+                        <div class="values" id="formula-conservation"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="setupPopup">
+        <div id="setupContent">
+            <h2>Set Initial Conditions for Red Ball</h2>
+            <p>Enter the initial speed (0-10 m/s):</p>
+            <input type="number" id="speedInput" class="setupInput" min="0" max="10" step="0.1" value="3">
+            <p>Enter the initial direction (0-360 degrees):</p>
+            <input type="number" id="directionInput" class="setupInput" min="0" max="360" step="1" value="0">
+            <p>Enter the initial X position (0.1-2.0 m):</p>
+            <input type="number" id="posXInput" class="setupInput" min="0.1" max="2.0" step="0.1" value="0.5">
+            <p>Enter the initial Y position (0.1-1.0 m):</p>
+            <input type="number" id="posYInput" class="setupInput" min="0.1" max="1.0" step="0.1" value="0.71">
+            <br>
+            <button onclick="setInitialConditions()">Start Simulation</button>
+        </div>
+    </div>
+
+    <script>
+        let ball1, ball2;
+        let friction = false;
+        let frictionCoefficient = 0.02; // Default friction coefficient
+        let isDragging = false;
+        let collisionData = [];
+        let simulationStarted = true;
+        let elasticity = 0.97; // Coefficient of restitution (elasticity factor)
+        let ignoreInertia = false; // Flag to ignore inertia
+        let isPaused = false; // Global variable to track pause state
+        let slingshotDragging = false;  // For slingshot dragging when paused
+        let slingshotStart;             // Stores the initial position for the slingshot
+
+        // 추가: 스페이스바 기본 동작 방지를 위한 이벤트 리스너
+        window.addEventListener('keydown', function (e) {
+            if (e.code === 'Space') {
+                e.preventDefault(); // 스페이스바 기본 동작(스크롤) 방지
+            }
+        });
+
+        // Pause or resume the simulation with spacebar
+        function keyPressed() {
+            if (key === ' ') {
+                isPaused = !isPaused; // Toggle the pause state
+            }
+        }
+
+        // Initialize last non-zero values
+        let lastDeltaP1 = null;
+        let lastDeltaP2 = null;
+        let lastTotalMomentumBefore = null;
+        let lastTotalMomentumAfter = null;
+
+        const PIXELS_PER_METER = 300;
+        const tableWidth = 2.84; // in meters (9.32 feet)
+        const tableHeight = 1.42; // in meters (4.66 feet)
+        const standardBallRadius = 0.15 / 2; // Standard pool ball radius (57.15mm diameter)
+        const velocityThreshold = 0.01; // Threshold for stopping the ball to prevent vibration
+
+        let canvas;
+
+        function setup() {
+            canvas = createCanvas(tableWidth * PIXELS_PER_METER, tableHeight * PIXELS_PER_METER);
+            canvas.parent('canvasContainer');
+
+            ball1 = new Ball(0.5, tableHeight / 2, standardBallRadius, color(255, 0, 0)); // Red ball
+            ball2 = new Ball(tableWidth - 0.5, tableHeight / 2, standardBallRadius, color(255, 255, 255)); // White ball
+
+            // Set initial velocity for ball1 (red ball)
+            const initialSpeedBall1 = 3; // Initial speed in m/s
+            const initialDirectionBall1 = 0; // Initial direction in degrees
+            const velocityAngleBall1 = radians(initialDirectionBall1);
+            ball1.vel = createVector(initialSpeedBall1 * cos(velocityAngleBall1), initialSpeedBall1 * sin(velocityAngleBall1));
+
+            // Set initial velocity for ball2 (white ball)
+            const initialSpeedBall2 = 0; // Initial speed in m/s
+            const initialDirectionBall2 = 180; // Initial direction in degrees
+            const velocityAngleBall2 = radians(initialDirectionBall2);
+            ball2.vel = createVector(initialSpeedBall2 * cos(velocityAngleBall2), initialSpeedBall2 * sin(velocityAngleBall2));
+
+            // Initialize previous velocities
+            ball1.previousVel = ball1.vel.copy();
+            ball2.previousVel = ball2.vel.copy();
+
+            updateDashboard();
+        }
+
+        const CUE_LENGTH = 300;  // 큐대 기본 길이 (픽셀 단위)
+        const TIP_THICKNESS = 4;  // 얇은 팁 두께
+        const BASE_THICKNESS = 8; // 큐대 베이스 두께
+        const MIN_CUE_OFFSET = 360;  // 공에서 시작점까지의 최소 거리 (픽셀 단위)
+        const DRAG_MULTIPLIER = 100; // 드래그시 큐대가 멀어지는 가중치
+
+        function draw() {
+            // Always clear the screen
+            background(0, 0, 250);  // Blue background
+
+            // Show the reset velocity button when the simulation is paused
+            if (isPaused) {
+                document.getElementById('resetVelocityBtn').style.display = 'block';  // Show button
+            } else {
+                document.getElementById('resetVelocityBtn').style.display = 'none';  // Hide button
+            }
+
+            // Handle the paused state and slingshot
+            if (isPaused || !simulationStarted) {
+                // When paused, display slingshot dragging if active
+                if (slingshotDragging) {
+                    let mousePos = createVector(mouseX / PIXELS_PER_METER, mouseY / PIXELS_PER_METER);
+
+                    // Calculate the direction from the ball to the mouse
+                    let cueDirection = p5.Vector.sub(mousePos, ball1.pos);
+                    let dragDistance = cueDirection.mag();  // Calculate the distance of the drag
+                    cueDirection.normalize();  // Normalize the direction
+
+                    // Offset the start point by a dynamic distance from the ball, depending on the drag distance
+                    let cueOffset = MIN_CUE_OFFSET + dragDistance * DRAG_MULTIPLIER;  // The more you drag, the farther the cue offset
+                    let cueStartX = ball1.pos.x * PIXELS_PER_METER + cueDirection.x * cueOffset;
+                    let cueStartY = ball1.pos.y * PIXELS_PER_METER + cueDirection.y * cueOffset;
+
+                    // Draw the billiards cue with a fixed length and a tapering thickness
+                    let steps = 20;  // Number of segments for the cue stick
+                    let handleStart = 0.75; // Proportion where the handle starts (75% down the cue)
+
+                    for (let i = 0; i < steps; i++) {
+                        let interpolationFactor = i / steps;  // Goes from 0 to 1 over the length of the cue
+                        let x1 = cueStartX - cueDirection.x * (CUE_LENGTH * interpolationFactor);
+                        let y1 = cueStartY - cueDirection.y * (CUE_LENGTH * interpolationFactor);
+                        let x2 = cueStartX - cueDirection.x * (CUE_LENGTH * (interpolationFactor + 1 / steps));
+                        let y2 = cueStartY - cueDirection.y * (CUE_LENGTH * (interpolationFactor + 1 / steps));
+
+                        // Color sections based on position on the cue stick
+                        if (interpolationFactor < 0.3) {
+                            stroke(255, 223, 186);  // Light wood color for the tip
+                        } else if (interpolationFactor < handleStart) {
+                            stroke(205, 133, 63);  // Brown wood for the middle
+                        } else {
+                            stroke(60, 60, 60);  // Darker color for the handle part
+                        }
+
+                        strokeWeight(TIP_THICKNESS + (BASE_THICKNESS - TIP_THICKNESS) * (1 - interpolationFactor));  // Thicker at the far end, thinner near the ball
+                        line(x1, y1, x2, y2);  // Draw the cue stick as a series of lines
+                    }
+
+                    // Draw the "tip" where the cue meets the ball
+                    stroke(255, 223, 186);  // Light wood for the cue tip
+                    strokeWeight(TIP_THICKNESS);       // Set the weight for the tip (thinner than the rest)
+                    let tipX = ball1.pos.x * PIXELS_PER_METER;
+                    let tipY = ball1.pos.y * PIXELS_PER_METER;
+                    point(tipX, tipY);     // Draw the cue tip at the ball
+
+                    // Now draw the "drag line" to represent the force applied
+                    let slingshotVector = p5.Vector.sub(slingshotStart, mousePos);  // The drag distance
+                    let dragForce = slingshotVector.mag();  // Magnitude of the force
+
+                    stroke(0, 255, 0, 110);  // Green color for the force line
+                    strokeWeight(3);  // Thin line for the force
+                    let dragEndX = ball1.pos.x * PIXELS_PER_METER - slingshotVector.x * PIXELS_PER_METER;
+                    let dragEndY = ball1.pos.y * PIXELS_PER_METER - slingshotVector.y * PIXELS_PER_METER;
+
+                    // Draw the drag line
+                    line(ball1.pos.x * PIXELS_PER_METER, ball1.pos.y * PIXELS_PER_METER, dragEndX, dragEndY);
+
+                    // Draw the "predicted path" based on the slingshot vector
+                    stroke(255, 165, 0, 150);  // Orange color for the predicted path
+                    strokeWeight(2);
+                    let velocityEndX = ball1.pos.x * PIXELS_PER_METER + slingshotVector.x * 2 * PIXELS_PER_METER;
+                    let velocityEndY = ball1.pos.y * PIXELS_PER_METER + slingshotVector.y * 2 * PIXELS_PER_METER;
+                    line(ball1.pos.x * PIXELS_PER_METER, ball1.pos.y * PIXELS_PER_METER, velocityEndX, velocityEndY);  // Predicted path line
+                }
+
+                // Always display the ball, even when paused and dragging
+                ball1.display();
+                ball2.display();
+
+                // Do not proceed with the rest of the simulation if paused
+                return;
+            }
+
+            // If the simulation is running
+            if (isDragging) {
+                let mousePos = createVector(mouseX / PIXELS_PER_METER, mouseY / PIXELS_PER_METER);
+                ball1.pos = mousePos;  // Move the ball directly while dragging
+            }
+
+            // Update ball positions and check for collisions when running
+            ball1.update();
+            ball2.update();
+
+            // Check for wall collisions and other logic
+            checkWallCollision(ball1);
+            checkWallCollision(ball2);
+            checkCollision(ball1, ball2);
+
+            // Display the balls after updating their positions
+            ball1.display();
+            ball2.display();
+
+            // Update the dashboards and other information
+            updateDashboard();
+            updateFormulaDashboard();
+        }
+
+        function mousePressed() {
+            let mousePos = createVector(mouseX / PIXELS_PER_METER, mouseY / PIXELS_PER_METER);
+
+            // If the ball is clicked, start dragging
+            if (ball1.contains(mousePos.x, mousePos.y)) {
+                if (isPaused) {
+                    // Start slingshot dragging when paused
+                    slingshotDragging = true;
+                    slingshotStart = ball1.pos.copy();  // Store the starting position of the ball
+                } else {
+                    // Normal dragging when simulation is running
+                    isDragging = true;
+                }
+            }
+        }
+
+        function mouseReleased() {
+            // When mouse is released after slingshot dragging (paused)
+            if (slingshotDragging) {
+                let mousePos = createVector(mouseX / PIXELS_PER_METER, mouseY / PIXELS_PER_METER);
+                let slingshotVector = p5.Vector.sub(slingshotStart, mousePos); // Calculate the slingshot force
+
+                // Set the velocity of the ball based on the slingshot force
+                ball1.vel = slingshotVector.mult(5);  // Adjust multiplier to control speed scaling
+                slingshotDragging = false;
+                isPaused = false;  // Unpause the simulation when slingshot is released
+            }
+
+            // Stop dragging when simulation is running
+            if (isDragging) {
+                isDragging = false;
+            }
+        }
+
+        class Ball {
+            constructor(x, y, r, c) {
+                this.pos = createVector(x, y);
+                this.vel = createVector(0, 0);
+                this.acc = createVector(0, 0);
+                this.r = r;
+                this.m = 0.17; // 170 grams converted to kilograms
+                this.c = c;
+                this.previousVel = this.vel.copy(); // Initialize previous velocity
+            }
+
+            applyForce(force) {
+                let mass = ignoreInertia ? 1 : this.m;
+                let f = p5.Vector.div(force, mass);
+                this.acc.add(f);
+            }
+
+            update() {
+                // Before updating, store the current velocity as previousVel
+                this.previousVel = this.vel.copy();
+
+                if (friction && this.vel.mag() > 0) {
+                    let frictionForce = this.vel.copy();
+                    frictionForce.normalize();
+                    frictionForce.mult(-frictionCoefficient * this.m * 9.81); // F_friction = μ * m * g
+                    this.applyForce(frictionForce);
+                }
+
+                this.vel.add(p5.Vector.mult(this.acc, 1 / 60)); // Assuming 60 FPS
+
+                // Implement velocity threshold to prevent vibration near zero
+                if (abs(this.vel.x) < velocityThreshold) this.vel.x = 0;
+                if (abs(this.vel.y) < velocityThreshold) this.vel.y = 0;
+
+                this.pos.add(p5.Vector.mult(this.vel, 1 / 60));
+                this.acc.mult(0); // Reset acceleration
+            }
+
+            display() {
+                // Set thin outline for balls
+                stroke(0.5); // Black outline
+                strokeWeight(1); // Thin outline
+
+                fill(this.c);
+                ellipse(
+                    this.pos.x * PIXELS_PER_METER,
+                    this.pos.y * PIXELS_PER_METER,
+                    this.r * 2 * PIXELS_PER_METER
+                );
+                this.drawVelocityVector();
+            }
+
+            drawVelocityVector() {
+                const scaleFactor = 0.1;
+
+                // Set thicker lines for the arrows
+                strokeWeight(6); // Thicker arrows for better visibility
+
+                // Only draw the X component arrow if the X velocity is not zero
+                if (this.vel.x !== 0) {
+                    stroke(0, 255, 0); // Green color for the X-component
+                    this.drawArrow(
+                        this.pos.x * PIXELS_PER_METER,
+                        this.pos.y * PIXELS_PER_METER,
+                        (this.pos.x + this.vel.x * scaleFactor) * PIXELS_PER_METER,
+                        this.pos.y * PIXELS_PER_METER,
+                        8 // Arrowhead size
+                    );
+                }
+
+                // Only draw the Y component arrow if the Y velocity is not zero
+                if (this.vel.y !== 0) {
+                    stroke(255, 255, 0); // Yellow color for the Y-component
+                    this.drawArrow(
+                        this.pos.x * PIXELS_PER_METER,
+                        this.pos.y * PIXELS_PER_METER,
+                        this.pos.x * PIXELS_PER_METER,
+                        (this.pos.y + this.vel.y * scaleFactor) * PIXELS_PER_METER,
+                        8 // Arrowhead size
+                    );
+                }
+
+                // Only draw the resultant arrow if the velocity magnitude is not zero
+                if (this.vel.mag() !== 0) {
+                    stroke(255, 165, 0); // Orange color for the resultant vector
+                    this.drawArrow(
+                        this.pos.x * PIXELS_PER_METER,
+                        this.pos.y * PIXELS_PER_METER,
+                        (this.pos.x + this.vel.x * scaleFactor) * PIXELS_PER_METER,
+                        (this.pos.y + this.vel.y * scaleFactor) * PIXELS_PER_METER,
+                        10 // Larger arrowhead size
+                    );
+                }
+            }
+
+            drawArrow(x1, y1, x2, y2, arrowSize) {
+                line(x1, y1, x2, y2);
+                if (dist(x1, y1, x2, y2) > 0) { // Only draw the arrowhead if there is some distance
+                    push();
+                    translate(x2, y2);
+                    let angle = atan2(y2 - y1, x2 - x1);
+                    rotate(angle);
+                    triangle(0, 0, -arrowSize, arrowSize / 2, -arrowSize, -arrowSize / 2);
+                    pop();
+                }
+            }
+
+            contains(x, y) {
+                return dist(x, y, this.pos.x, this.pos.y) < this.r;
+            }
+        }
+
+        function checkCollision(b1, b2) {
+            let dx = b2.pos.x - b1.pos.x;
+            let dy = b2.pos.y - b1.pos.y;
+            let distance = sqrt(dx * dx + dy * dy);
+
+            if (distance < b1.r + b2.r) {
+                if (distance === 0) {
+                    dx = 1;
+                    dy = 0;
+                    distance = b1.r + b2.r;
+                }
+
+                // Correct positions to prevent overlap
+                let overlap = (b1.r + b2.r) - distance;
+
+                let displacement = createVector(dx, dy).normalize().mult(overlap / 2);
+                b1.pos.sub(displacement);
+                b2.pos.add(displacement);
+
+                // Store velocities before collision
+                b1.previousVel = b1.vel.copy();
+                b2.previousVel = b2.vel.copy();
+
+                // Calculate unit normal and unit tangent vectors
+                let normal = createVector(dx, dy).normalize();
+                let tangent = createVector(-normal.y, normal.x);
+
+                // Decompose velocities into normal and tangential components
+                let v1n = p5.Vector.dot(normal, b1.vel);
+                let v1t = p5.Vector.dot(tangent, b1.vel);
+
+                let v2n = p5.Vector.dot(normal, b2.vel);
+                let v2t = p5.Vector.dot(tangent, b2.vel);
+
+                let m1 = ignoreInertia ? 1 : b1.m;
+                let m2 = ignoreInertia ? 1 : b2.m;
+
+                // Compute new normal velocities using 1D elastic collision equations
+                let v1nAfter = (v1n * (m1 - elasticity * m2) + 2 * elasticity * m2 * v2n) / (m1 + m2);
+                let v2nAfter = (v2n * (m2 - elasticity * m1) + 2 * elasticity * m1 * v1n) / (m1 + m2);
+
+                // Convert scalar normal and tangential velocities into vectors
+                let v1nVec = p5.Vector.mult(normal, v1nAfter);
+                let v1tVec = p5.Vector.mult(tangent, v1t);
+
+                let v2nVec = p5.Vector.mult(normal, v2nAfter);
+                let v2tVec = p5.Vector.mult(tangent, v2t);
+
+                // Update velocities
+                b1.vel = p5.Vector.add(v1nVec, v1tVec);
+                b2.vel = p5.Vector.add(v2nVec, v2tVec);
+
+                recordCollisionData(b1, b2);
+            }
+        }
+
+        function checkWallCollision(ball) {
+            let systemMomentumBefore = getTotalMomentum().copy(); // 충돌 전 시스템 모멘텀
+
+            let collided = false;
+            let momentumChange = createVector(0, 0);
+
+            if (ball.pos.x - ball.r < 0) {
+                ball.pos.x = ball.r;
+                if (ball.vel.x < 0) {
+                    momentumChange.x = ball.vel.x * ball.m * 2; // 모멘텀 변화 계산
+                    ball.vel.x *= -elasticity;
+                    collided = true;
+                }
+            } else if (ball.pos.x + ball.r > tableWidth) {
+                ball.pos.x = tableWidth - ball.r;
+                if (ball.vel.x > 0) {
+                    momentumChange.x = ball.vel.x * ball.m * 2;
+                    ball.vel.x *= -elasticity;
+                    collided = true;
+                }
+            }
+
+            if (ball.pos.y - ball.r < 0) {
+                ball.pos.y = ball.r;
+                if (ball.vel.y < 0) {
+                    momentumChange.y = ball.vel.y * ball.m * 2;
+                    ball.vel.y *= -elasticity;
+                    collided = true;
+                }
+            } else if (ball.pos.y + ball.r > tableHeight) {
+                ball.pos.y = tableHeight - ball.r;
+                if (ball.vel.y > 0) {
+                    momentumChange.y = ball.vel.y * ball.m * 2;
+                    ball.vel.y *= -elasticity;
+                    collided = true;
+                }
+            }
+
+            if (collided) {
+                let systemMomentumAfter = getTotalMomentum().copy(); // 충돌 후 시스템 모멘텀
+                let deltaP_system = p5.Vector.sub(systemMomentumAfter, systemMomentumBefore).mag().toFixed(4); // 시스템 모멘텀 변화
+
+                recordWallCollision(ball, momentumChange, deltaP_system);
+            }
+        }
+
+        function resetVelocities() {
+            ball1.vel = createVector(0, 0);  // Set ball1 velocity to zero
+            ball2.vel = createVector(0, 0);  // Set ball2 velocity to zero
+        }
+
+        function resetSimulation() {
+            showSetupPopup();
+            collisionData = [];
+            updateCollisionTable();
+
+            // Reset last non-zero values
+            lastDeltaP1 = null;
+            lastDeltaP2 = null;
+            lastTotalMomentumBefore = null;
+            lastTotalMomentumAfter = null;
+        }
+
+        function toggleFriction() {
+            friction = !friction;
+            document.getElementById('friction-status').textContent = friction ? 'On' : 'Off';
+            document.getElementById('frictionSlider').disabled = !friction;
+        }
+
+        function toggleInertia() {
+            ignoreInertia = !ignoreInertia;
+            document.getElementById('inertia-status').textContent = ignoreInertia ? 'Off' : 'On';
+        }
+
+        function toggleElasticCollision() {
+            const checkbox = document.getElementById('elasticCollisionCheckbox');
+            elasticity = checkbox.checked ? 1 : parseFloat(document.getElementById('elasticitySlider').value);
+            document.getElementById('elasticitySlider').disabled = checkbox.checked;
+            document.getElementById('elasticityValue').textContent = elasticity.toFixed(2);
+        }
+
+        function updateElasticity() {
+            elasticity = parseFloat(document.getElementById('elasticitySlider').value);
+            document.getElementById('elasticityValue').textContent = elasticity.toFixed(2);
+        }
+
+        function updateFrictionCoefficient() {
+            frictionCoefficient = parseFloat(document.getElementById('frictionSlider').value);
+            document.getElementById('frictionValue').textContent = frictionCoefficient.toFixed(3);
+        }
+
+        function updateBallSize() {
+            let sizeMultiplier = parseFloat(document.getElementById('ballSizeSlider').value);
+            document.getElementById('ballSizeValue').textContent = sizeMultiplier.toFixed(2) + '×';
+
+            ball1.r = standardBallRadius * sizeMultiplier;
+            ball2.r = standardBallRadius * sizeMultiplier;
+
+            // Ensure balls are within bounds after size change
+            checkWallCollision(ball1);
+            checkWallCollision(ball2);
+        }
+
+        function updateRedBallVelocity() {
+            let speed = parseFloat(document.getElementById('redBallVelocitySlider').value);
+            document.getElementById('redBallVelocityValue').textContent = speed.toFixed(1) + ' m/s';
+            let currentDirection = ball1.vel.heading(); // Keep the same direction
+            ball1.vel = p5.Vector.fromAngle(currentDirection).mult(speed);
+        }
+
+        function updateDashboard() {
+            let m1 = ignoreInertia ? 1 : ball1.m;
+            let m2 = ignoreInertia ? 1 : ball2.m;
+
+            let momentum1 = p5.Vector.mult(ball1.vel, m1);
+            let momentum2 = p5.Vector.mult(ball2.vel, m2);
+            let totalMomentum = p5.Vector.add(momentum1, momentum2);
+
+            let momentum1Mag = momentum1.mag();
+            let momentum2Mag = momentum2.mag();
+            let totalMomentumMag = totalMomentum.mag();
+
+            document.getElementById('ball1-info').innerHTML = `
+                <strong>Red Ball:</strong><br>
+                Velocity: (${ball1.vel.x.toFixed(2)} m/s, ${ball1.vel.y.toFixed(2)} m/s)<br>
+                Speed: ${ball1.vel.mag().toFixed(2)} m/s<br>
+                Momentum: (${momentum1.x.toFixed(4)}, ${momentum1.y.toFixed(4)}) kg·m/s<br>
+                Resultant Momentum: ${momentum1Mag.toFixed(4)} kg·m/s
+            `;
+            document.getElementById('ball2-info').innerHTML = `
+                <strong>White Ball:</strong><br>
+                Velocity: (${ball2.vel.x.toFixed(2)} m/s, ${ball2.vel.y.toFixed(2)} m/s)<br>
+                Speed: ${ball2.vel.mag().toFixed(2)} m/s<br>
+                Momentum: (${momentum2.x.toFixed(4)}, ${momentum2.y.toFixed(4)}) kg·m/s<br>
+                Resultant Momentum: ${momentum2Mag.toFixed(4)} kg·m/s
+            `;
+            document.getElementById('momentum-info').innerHTML = `
+                <strong>Total Momentum:</strong><br>
+                Components: (${totalMomentum.x.toFixed(4)}, ${totalMomentum.y.toFixed(4)}) kg·m/s<br>
+                Resultant: ${totalMomentumMag.toFixed(4)} kg·m/s
+            `;
+        }
+
+        function recordCollisionData(b1, b2) {
+            let m1 = ignoreInertia ? 1 : b1.m;
+            let m2 = ignoreInertia ? 1 : b2.m;
+
+            // 충돌 전 공의 속도 저장
+            let ball1Before = b1.previousVel.copy();
+            let ball2Before = b2.previousVel.copy();
+
+            // 충돌 전 시스템 모멘텀
+            let momentumBefore = p5.Vector.add(
+                p5.Vector.mult(ball1Before, m1),
+                p5.Vector.mult(ball2Before, m2)
+            );
+
+            // 충돌 후 공의 속도 (이미 업데이트됨)
+            let ball1After = b1.vel.copy();
+            let ball2After = b2.vel.copy();
+
+            // 충돌 후 시스템 모멘텀
+            let momentumAfter = p5.Vector.add(
+                p5.Vector.mult(ball1After, m1),
+                p5.Vector.mult(ball2After, m2)
+            );
+
+            // 시스템 모멘텀 변화 (벡터 차이의 크기)
+            let deltaP_system = p5.Vector.sub(momentumAfter, momentumBefore).mag().toFixed(4);
+
+            // 개별 모멘텀 변화 (절대값 차이)
+            let deltaP1 = p5.Vector.sub(ball1After, ball1Before).mult(m1).mag().toFixed(4);
+            let deltaP2 = p5.Vector.sub(ball2After, ball2Before).mult(m2).mag().toFixed(4);
+
+            collisionData.unshift({
+                time: millis() / 1000,
+                type: 'Ball Collision',
+                ball1Before: ball1Before,
+                ball2Before: ball2Before,
+                ball1After: ball1After,
+                ball2After: ball2After,
+                deltaP1: deltaP1,
+                deltaP2: deltaP2,
+                systemMomentumChange: deltaP_system + ' kg·m/s'
+            });
+
+            // 최신 10개 충돌만 유지
+            if (collisionData.length > 10) {
+                collisionData.pop();
+            }
+
+            // 마지막 비영 속도 값 업데이트
+            lastDeltaP1 = p5.Vector.sub(p5.Vector.mult(ball1After, m1), p5.Vector.mult(ball1Before, m1));
+            lastDeltaP2 = p5.Vector.sub(p5.Vector.mult(ball2After, m2), p5.Vector.mult(ball2Before, m2));
+
+            lastTotalMomentumBefore = momentumBefore.copy();
+            lastTotalMomentumAfter = momentumAfter.copy();
+
+            updateCollisionTable();
+        }
+
+        function recordWallCollision(ball, momentumChange, deltaP_system_mag) {
+            collisionData.unshift({
+                time: millis() / 1000,
+                type: 'Wall Collision',
+                ball: ball === ball1 ? 'Red Ball' : 'White Ball',
+                deltaP: momentumChange.mag().toFixed(4) + ' kg·m/s',
+                systemMomentumChange: deltaP_system_mag + ' kg·m/s'
+            });
+
+            // 최신 10개 충돌만 유지
+            if (collisionData.length > 10) {
+                collisionData.pop();
+            }
+
+            updateCollisionTable();
+        }
+
+        function updateCollisionTable() {
+            const tableBody = document.querySelector('#collision-table tbody');
+            tableBody.innerHTML = '';
+
+            collisionData.forEach(data => {
+                const row = document.createElement('tr');
+
+                if (data.type === 'Wall Collision') {
+                    // 벽 충돌 데이터 처리
+                    row.innerHTML = `
+                        <td>${data.time.toFixed(2)} s</td>
+                        <td>${data.type}</td>
+                        <td>${data.ball}</td>
+                        <td>-</td> <!-- 'Details' 열을 위한 플레이스홀더 -->
+                        <td>${data.deltaP}</td>
+                        <td>${data.systemMomentumChange}</td>
+                    `;
+                } else if (data.type === 'Ball Collision') {
+                    // 공 간 충돌 데이터 처리
+                    row.innerHTML = `
+                        <td>${data.time.toFixed(2)} s</td>
+                        <td>${data.type}</td>
+                        <td>-</td>
+                        <td>
+                            Ball 1 Before: (${data.ball1Before.x.toFixed(2)}, ${data.ball1Before.y.toFixed(2)}) m/s<br>
+                            Ball 2 Before: (${data.ball2Before.x.toFixed(2)}, ${data.ball2Before.y.toFixed(2)}) m/s<br>
+                            Ball 1 After: (${data.ball1After.x.toFixed(2)}, ${data.ball1After.y.toFixed(2)}) m/s<br>
+                            Ball 2 After: (${data.ball2After.x.toFixed(2)}, ${data.ball2After.y.toFixed(2)}) m/s
+                        </td>
+                        <td>Δp₁: ${data.deltaP1} kg·m/s<br>Δp₂: ${data.deltaP2} kg·m/s</td>
+                        <td>${data.systemMomentumChange}</td>
+                    `;
+                }
+
+                tableBody.appendChild(row);
+            });
+        }
+
+        function getTotalMomentum() {
+            let p1 = p5.Vector.mult(ball1.vel, ball1.m);
+            let p2 = p5.Vector.mult(ball2.vel, ball2.m);
+            return p5.Vector.add(p1, p2);
+        }
+
+        function updateFormulaDashboard() {
+            let m1 = ignoreInertia ? 1 : ball1.m;
+            let m2 = ignoreInertia ? 1 : ball2.m;
+
+            // Velocities before and after (vectors)
+            let u1 = ball1.previousVel.copy();
+            let u2 = ball2.previousVel.copy();
+            let v1 = ball1.vel.copy();
+            let v2 = ball2.vel.copy();
+
+            // p = m * v for each ball (vectors)
+            let p1 = p5.Vector.mult(v1, m1);
+            let p2 = p5.Vector.mult(v2, m2);
+
+            // Update 'formula-p' to show individual momenta (optional)
+            document.getElementById('formula-p').innerHTML = `
+                <strong>Individual Momenta:</strong><br>
+                Red Ball: p = ${m1.toFixed(2)} kg × |v| = ${m1.toFixed(2)} kg × ${v1.mag().toFixed(2)} m/s = ${p1.mag().toFixed(2)} kg·m/s<br>
+                White Ball: p = ${m2.toFixed(2)} kg × |v| = ${m2.toFixed(2)} kg × ${v2.mag().toFixed(2)} m/s = ${p2.mag().toFixed(2)} kg·m/s
+            `;
+
+            // I = m * v - m * u (Change in momentum)
+            let deltaP1 = p5.Vector.sub(p5.Vector.mult(v1, m1), p5.Vector.mult(u1, m1));
+            let deltaP2 = p5.Vector.sub(p5.Vector.mult(v2, m2), p5.Vector.mult(u2, m2));
+
+            // Use last non-zero values if deltaP is zero
+            if (deltaP1.mag() === 0 && lastDeltaP1 !== null) {
+                deltaP1 = lastDeltaP1.copy();
+            } else {
+                lastDeltaP1 = deltaP1.copy();
+            }
+
+            if (deltaP2.mag() === 0 && lastDeltaP2 !== null) {
+                deltaP2 = lastDeltaP2.copy();
+            } else {
+                lastDeltaP2 = deltaP2.copy();
+            }
+
+            // Calculate total change in momentum for the system
+            let deltaP_total = p5.Vector.add(deltaP1, deltaP2);
+
+            // Update 'formula-I-mvmu' to show total system's I
+            document.getElementById('formula-I-mvmu').innerHTML = `
+                <strong>Total System:</strong><br>
+                I = Δp = Δp₁ + Δp₂ = ${deltaP_total.mag().toFixed(4)} kg·m/s
+            `;
+
+            // Conservation of Momentum
+            let totalMomentumBefore = p5.Vector.add(p5.Vector.mult(u1, m1), p5.Vector.mult(u2, m2));
+            let totalMomentumAfter = p5.Vector.add(p5.Vector.mult(v1, m1), p5.Vector.mult(v2, m2));
+
+            let totalMomentumBeforeMag = totalMomentumBefore.mag();
+            let totalMomentumAfterMag = totalMomentumAfter.mag();
+
+            // Use last non-zero values if there is no change
+            if (totalMomentumBefore.equals(totalMomentumAfter) && lastTotalMomentumBefore !== null) {
+                totalMomentumBefore = lastTotalMomentumBefore.copy();
+                totalMomentumAfter = lastTotalMomentumAfter.copy();
+                totalMomentumBeforeMag = totalMomentumBefore.mag();
+                totalMomentumAfterMag = totalMomentumAfter.mag();
+            } else {
+                lastTotalMomentumBefore = totalMomentumBefore.copy();
+                lastTotalMomentumAfter = totalMomentumAfter.copy();
+            }
+
+            // Update 'formula-conservation' to indicate total system's momentum
+            document.getElementById('formula-conservation').innerHTML = `
+                <strong>Total System:</strong><br>
+                Before: |p| = ${totalMomentumBeforeMag.toFixed(4)} kg·m/s<br>
+                After: |p| = ${totalMomentumAfterMag.toFixed(4)} kg·m/s
+            `;
+        }
+
+        function showSetupPopup() {
+            document.getElementById('setupPopup').style.display = 'flex';
+            simulationStarted = false;
+        }
+
+        function setInitialConditions() {
+            const speed = parseFloat(document.getElementById('speedInput').value);
+            const direction = parseFloat(document.getElementById('directionInput').value);
+            const posX = parseFloat(document.getElementById('posXInput').value);
+            const posY = parseFloat(document.getElementById('posYInput').value);
+
+            ball1.pos = createVector(posX, posY);
+            const velocityMagnitude = speed;
+            const velocityAngle = radians(direction);
+            ball1.vel = createVector(velocityMagnitude * cos(velocityAngle), velocityMagnitude * sin(velocityAngle));
+
+            // Update the red ball velocity slider to reflect the initial speed
+            document.getElementById('redBallVelocitySlider').value = speed;
+            document.getElementById('redBallVelocityValue').textContent = speed.toFixed(1) + ' m/s';
+
+            // Reset ball2 position and velocity
+            ball2.pos = createVector(tableWidth - 0.5, tableHeight / 2);
+            ball2.vel = createVector(0, 0);
+
+            // Initialize previous velocities
+            ball1.previousVel = ball1.vel.copy();
+            ball2.previousVel = ball2.vel.copy();
+
+            // Reset last non-zero values
+            lastDeltaP1 = null;
+            lastDeltaP2 = null;
+            lastTotalMomentumBefore = null;
+            lastTotalMomentumAfter = null;
+
+            document.getElementById('setupPopup').style.display = 'none';
+            simulationStarted = true;
+        };
+    </script>
+</body>
+</html>
